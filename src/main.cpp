@@ -260,7 +260,7 @@ int main() {
 						vector<double> ptsx;
 						vector<double> ptsy;
 						
-						//Finding the last two points the car were
+						//Finding the last two points that refer to where the car was
 
 						//Reference x,y and yaw
 						//Used if starting point is referred as where the car is at
