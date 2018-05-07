@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -200,6 +201,12 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
+	// Car starts in lane 1
+	int lane = 1;
+
+	//Reference velocity to be achieved. Speed limit is 50, so used 49.5
+	double ref_vel = 49.5; //mph
+
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -237,6 +244,9 @@ int main() {
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
 
+						//Stores the number of leftover points that were not processed
+						int prev_size = previous_path_x.size();
+
           	json msgJson;
 
           	vector<double> next_x_vals;
@@ -244,6 +254,56 @@ int main() {
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+
+						//Vectors to store (x,y) points
+						//To be used for interpolating with spline to fill it with more points that can be used to control speed
+						vector<double> ptsx;
+						vector<double> ptsy;
+						
+						//Finding the last two points the car were
+
+						//Reference x,y and yaw
+						//Used if starting point is referred as where the car is at
+						double ref_x = car_x;
+						double ref_y = car_y;
+						double ref_yaw = deg2rad(car_yaw);
+
+						//if previous points not processed is almost empty, use car as starting reference
+						if(prev_size < 2) {
+							//Using points that make path tangent to car
+							double prev_car_x = car_x - cos(car_yaw);
+							double prev_car_y = car_y - sin(car_yaw);
+
+							ptsx.push_back(prev_car_x);
+							ptsx.push_back(car_x);
+							ptsy.push_back(prev_car_y);
+							ptsy.push_back(car_y);
+						}
+						//if previous points present, then use previous points as starting reference
+						else {
+							double ref_x_prev = previous_path_x[prev_size-2];
+							double ref_y_prev = previous_path_y[prev_size-2];
+
+							//Use previous point as the starting reference
+							ref_x = previous_path_x[prev_size-1];
+							ref_y = previous_path_y[prev_size-1];
+							ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
+
+							ptsx.push_back(ref_x_prev);
+							ptsx.push_back(ref_x);
+							ptsy.push_back(ref_y_prev);
+							ptsy.push_back(ref_y);
+						}
+
+						double dist_inc = 0.4;
+						for(int i = 0; i < 50; i++)
+						{
+								  double next_s = car_s + (i+1) * dist_inc;
+									double next_d = 6;
+									vector<double> xy = getXY(next_s,next_d,map_waypoints_s,map_waypoints_x,map_waypoints_y);
+									next_x_vals.push_back(xy[0]);
+									next_y_vals.push_back(xy[1]);
+						}
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
