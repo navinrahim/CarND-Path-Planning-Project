@@ -164,6 +164,9 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+//Reference velocity to be achieved. Speed limit is 50, so used 49.5
+double ref_vel = 49.5; //mph
+
 int main() {
   uWS::Hub h;
 
@@ -201,12 +204,6 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-	// Car starts in lane 1
-	int lane = 1;
-
-	//Reference velocity to be achieved. Speed limit is 50, so used 49.5
-	double ref_vel = 49.5; //mph
-
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -234,6 +231,11 @@ int main() {
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
 
+          	//Current lane
+          	std::cout<<"D:"<<car_d;
+          	int lane = 1;//(car_d-2)/4;
+          	std::cout<<"lane:"<<lane;
+
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
@@ -244,11 +246,12 @@ int main() {
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
 
-						//Stores the number of leftover points that were not processed
-						int prev_size = previous_path_x.size();
+			//Stores the number of leftover points that were not processed
+			int prev_size = previous_path_x.size();
 
           	json msgJson;
 
+          	//Vectors that will store points that have to be passed to the planner
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
@@ -295,17 +298,72 @@ int main() {
 							ptsy.push_back(ref_y);
 						}
 
+						/*
+						Creating 3 points at a distance of 30m each, to fit the spline and later sample points from them in such a way
+						that speed can be adjusted
+						*/
 						vector<double> next_wp0 = getXY(car_s + 30, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+						vector<double> next_wp1 = getXY(car_s + 60, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+						vector<double> next_wp2 = getXY(car_s + 90, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
-						// double dist_inc = 0.4;
-						// for(int i = 0; i < 50; i++)
-						// {
-						// 		  double next_s = car_s + (i+1) * dist_inc;
-						// 			double next_d = 6;
-						// 			vector<double> xy = getXY(next_s,next_d,map_waypoints_s,map_waypoints_x,map_waypoints_y);
-						// 			next_x_vals.push_back(xy[0]);
-						// 			next_y_vals.push_back(xy[1]);
-						// }
+						ptsx.push_back(next_wp0[0]);
+						ptsx.push_back(next_wp1[0]);
+						ptsx.push_back(next_wp2[0]);
+						ptsy.push_back(next_wp0[1]);
+						ptsy.push_back(next_wp1[1]);
+						ptsy.push_back(next_wp2[1]);
+
+						//Converting points into car's coordinate system
+						for(int i=0;i<ptsx.size();i++){
+							double shift_x = ptsx[i]-ref_x;
+							double shift_y = ptsy[i]-ref_y;
+
+							ptsx[i] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
+							ptsy[i] = shift_x*sin(-ref_yaw) + shift_y*cos(-ref_yaw);
+						}
+
+						//Creating a spline
+						tk::spline s;
+
+						//Setting ptsx and ptsy to the spline
+						s.set_points(ptsx,ptsy);
+
+						//Adding previously leftover points, to ensure smooth transitions
+						for(int i=0;i<prev_size;i++) {
+							next_x_vals.push_back(previous_path_x[i]);
+							next_y_vals.push_back(previous_path_y[i]);
+						}
+
+						//Selecting a target x,y point in the spline to divide it into N pieces to achieve the target velocity
+						double target_x = 30;   //Target horizon x-value
+						double target_y = s(target_x);   //Target y-value corresponding to the one in the spline for the x-value  
+						double target_dist = sqrt((target_x*target_x) + (target_y*target_y));   //Distance to the target horizon point
+
+						double x_add_on = 0;
+
+						//Number of equally distant points in the spline to be taken to obtain the reference velocity
+						double N = target_dist/(0.02 * ref_vel/2.24);   // As (N*0.02) * ref_vel = distance   //2.24 to convert to m/s
+
+						//Filling up the remaining points for the path planner apart from the left over points. 
+						//Total number of points passed is 50
+						for(int i=0; i<=50-prev_size; i++) {
+							double x_point = x_add_on + target_x/N;  
+							double y_point = s(x_point);
+
+							x_add_on = x_point;
+							double x_ref = x_point;
+							double y_ref = y_point;
+
+							//Converting back to the global coordinate system
+							x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
+							y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
+							x_point += ref_x;
+							y_point += ref_y;
+
+							next_x_vals.push_back(x_point);
+							next_y_vals.push_back(y_point);
+						}
+
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
