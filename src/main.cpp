@@ -262,7 +262,7 @@ int main() {
           	}
 
           	bool too_close = false;
-						bool lane_change = false;
+			bool lane_change = false;
 
           	//sensor_fusion[i] contains [id, x, y, vx, vy, s, d]
           	for(int i=0; i<sensor_fusion.size(); i++) {
@@ -278,144 +278,206 @@ int main() {
           			//Predicting where the car will be in the future
           			check_car_s += (double)prev_size*0.02*check_speed;
 
-								//If the other car is in front of our car and the gap between them is less than 30m
+					//If the other car is in front of our car and the gap between them is less than 30m
           			if((check_car_s>car_s) && ((check_car_s-car_s)<30)) {
-									//Flag for lane change
-									//lane_change = true;
-									//Set reference velocity to the other car's velocity
+						//Flag for lane change
+						lane_change = true;
+						//Set reference velocity to the other car's velocity
           				//ref_vel = check_speed;
-									too_close = true;
-									if(lane > 0) {
-										lane=0;
-									}
+						too_close = true;
           			}
           		}
           	}
 
-						if(too_close) {
-							ref_vel -= 0.224; //for a=5, v=5*0.02=0.1m/s=0.224mph
-						}
-						else if(ref_vel<49.5) {
-							ref_vel += 0.224;
-						}
+          	if(lane_change) {
+          		//Check whether changing lane to the left is safe or not
+          		int new_lane = lane - 1;
+          		bool good_lane_change = true;
 
-						//Vectors to store (x,y) points
-						//To be used for interpolating with spline to fill it with more points that can be used to control speed
-						vector<double> ptsx;
-						vector<double> ptsy;
-						
-						//Finding the last two points that refer to where the car was
+          		if(new_lane<0) {
+          			good_lane_change = false;
+          		}
 
-						//Reference x,y and yaw
-						//Used if starting point is referred as where the car is at
-						double ref_x = car_x;
-						double ref_y = car_y;
-						double ref_yaw = deg2rad(car_yaw);
+          		else {
+          			for(int i=0; i<sensor_fusion.size(); i++) {
+          				float d = sensor_fusion[i][6];
 
-						//if previous points not processed is almost empty, use car as starting reference
-						if(prev_size < 2) {
-							//Using points that make path tangent to car
-							double prev_car_x = car_x - cos(car_yaw);
-							double prev_car_y = car_y - sin(car_yaw);
+          				if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
+		      				double vx = sensor_fusion[i][3];
+			      			double vy = sensor_fusion[i][4];
+			      			double check_speed = sqrt(vx*vx+vy*vy);
+			      			double check_car_s = sensor_fusion[i][5];
 
-							ptsx.push_back(prev_car_x);
-							ptsx.push_back(car_x);
-							ptsy.push_back(prev_car_y);
-							ptsy.push_back(car_y);
-						}
-						//if previous points present, then use previous points as starting reference
-						else {
-							double ref_x_prev = previous_path_x[prev_size-2];
-							double ref_y_prev = previous_path_y[prev_size-2];
+			      			//Predicting where the car will be in the future
+			      			check_car_s += (double)prev_size*0.02*check_speed;
 
-							//Use previous point as the starting reference
-							ref_x = previous_path_x[prev_size-1];
-							ref_y = previous_path_y[prev_size-1];
-							ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
+			      			if(fabs(check_car_s-car_s)<25) {
+			      				good_lane_change = false;
+			      				break;
+			      			}
+			      		}
+          			}
+          		}
 
-							ptsx.push_back(ref_x_prev);
-							ptsx.push_back(ref_x);
-							ptsy.push_back(ref_y_prev);
-							ptsy.push_back(ref_y);
-						}
+          		if(!good_lane_change) {
+          			good_lane_change = true;
+          			new_lane = lane + 1;
 
-						/*
-						Creating 3 points at a distance of 30m each, to fit the spline and later sample points from them in such a way
-						that speed can be adjusted
-						*/
-						vector<double> next_wp0 = getXY(car_s + 30, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-						vector<double> next_wp1 = getXY(car_s + 60, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-						vector<double> next_wp2 = getXY(car_s + 90, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          			if(new_lane>2) {
+          				good_lane_change = false;
+          			}
+          			else {
+          				for(int i=0; i<sensor_fusion.size(); i++) {
+          					float d = sensor_fusion[i][6];
+          				
+      						if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
+			      				double vx = sensor_fusion[i][3];
+				      			double vy = sensor_fusion[i][4];
+				      			double check_speed = sqrt(vx*vx+vy*vy);
+				      			double check_car_s = sensor_fusion[i][5];
 
-						ptsx.push_back(next_wp0[0]);
-						ptsx.push_back(next_wp1[0]);
-						ptsx.push_back(next_wp2[0]);
-						ptsy.push_back(next_wp0[1]);
-						ptsy.push_back(next_wp1[1]);
-						ptsy.push_back(next_wp2[1]);
+				      			//Predicting where the car will be in the future
+				      			check_car_s += (double)prev_size*0.02*check_speed;
 
-						//Converting points into car's coordinate system
-						for(int i=0;i<ptsx.size();i++) {
-							double shift_x = ptsx[i]-ref_x;
-							double shift_y = ptsy[i]-ref_y;
+				      			if(fabs(check_car_s-car_s)<25) {
+				      				good_lane_change = false;
+				      				break;
+				      			}
+				      		}
+          				}
+          			}
+          		}
 
-							ptsx[i] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
-							ptsy[i] = shift_x*sin(-ref_yaw) + shift_y*cos(-ref_yaw);
-						}
+          		if(good_lane_change) {
+          			lane = new_lane;
+          		}
+          		
+          	}
 
-						//Creating a spline
-						tk::spline s;
+			if(too_close) {
+				ref_vel -= 0.224; //for a=5, v=5*0.02=0.1m/s=0.224mph
+			}
+			else if(ref_vel<49.5) {
+				ref_vel += 0.224;
+			}
 
-						//Setting ptsx and ptsy to the spline
-						s.set_points(ptsx,ptsy);
+			//Vectors to store (x,y) points
+			//To be used for interpolating with spline to fill it with more points that can be used to control speed
+			vector<double> ptsx;
+			vector<double> ptsy;
+			
+			//Finding the last two points that refer to where the car was
 
-						//Adding previously leftover points, to ensure smooth transitions
-						for(int i=0;i<prev_size;i++) {
-							next_x_vals.push_back(previous_path_x[i]);
-							next_y_vals.push_back(previous_path_y[i]);
-						}
+			//Reference x,y and yaw
+			//Used if starting point is referred as where the car is at
+			double ref_x = car_x;
+			double ref_y = car_y;
+			double ref_yaw = deg2rad(car_yaw);
 
-						//Selecting a target x,y point in the spline to divide it into N pieces to achieve the target velocity
-						double target_x = 30;   //Target horizon x-value
-						double target_y = s(target_x);   //Target y-value corresponding to the one in the spline for the x-value  
-						double target_dist = sqrt((target_x*target_x) + (target_y*target_y));   //Distance to the target horizon point
+			//if previous points not processed is almost empty, use car as starting reference
+			if(prev_size < 2) {
+				//Using points that make path tangent to car
+				double prev_car_x = car_x - cos(car_yaw);
+				double prev_car_y = car_y - sin(car_yaw);
 
-						double x_add_on = 0;
+				ptsx.push_back(prev_car_x);
+				ptsx.push_back(car_x);
+				ptsy.push_back(prev_car_y);
+				ptsy.push_back(car_y);
+			}
+			//if previous points present, then use previous points as starting reference
+			else {
+				double ref_x_prev = previous_path_x[prev_size-2];
+				double ref_y_prev = previous_path_y[prev_size-2];
 
-						//Number of equally distant points in the spline to be taken to obtain the reference velocity
-						double N = target_dist/(0.02 * ref_vel/2.24);   // As (N*0.02) * ref_vel = distance   //2.24 to convert to m/s
+				//Use previous point as the starting reference
+				ref_x = previous_path_x[prev_size-1];
+				ref_y = previous_path_y[prev_size-1];
+				ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
 
-						//Filling up the remaining points for the path planner apart from the left over points. 
-						//Total number of points passed is 50
-						for(int i=1; i<=50-prev_size; i++) {
-							double x_point = x_add_on + target_x/N;  
-							double y_point = s(x_point);
+				ptsx.push_back(ref_x_prev);
+				ptsx.push_back(ref_x);
+				ptsy.push_back(ref_y_prev);
+				ptsy.push_back(ref_y);
+			}
 
-							x_add_on = x_point;
-							double x_ref = x_point;
-							double y_ref = y_point;
+			/*
+			Creating 3 points at a distance of 30m each, to fit the spline and later sample points from them in such a way
+			that speed can be adjusted
+			*/
+			vector<double> next_wp0 = getXY(car_s + 30, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp1 = getXY(car_s + 60, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> next_wp2 = getXY(car_s + 90, 2+4*lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
-							//Converting back to the global coordinate system
-							x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
-							y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
-							x_point += ref_x;
-							y_point += ref_y;
+			ptsx.push_back(next_wp0[0]);
+			ptsx.push_back(next_wp1[0]);
+			ptsx.push_back(next_wp2[0]);
+			ptsy.push_back(next_wp0[1]);
+			ptsy.push_back(next_wp1[1]);
+			ptsy.push_back(next_wp2[1]);
 
-							next_x_vals.push_back(x_point);
-							next_y_vals.push_back(y_point);
+			//Converting points into car's coordinate system
+			for(int i=0;i<ptsx.size();i++) {
+				double shift_x = ptsx[i]-ref_x;
+				double shift_y = ptsy[i]-ref_y;
 
-							// if(ref_vel<49.5) {
-							// ref_vel += 0.224;
-							//}
-						}
+				ptsx[i] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
+				ptsy[i] = shift_x*sin(-ref_yaw) + shift_y*cos(-ref_yaw);
+			}
 
-						msgJson["next_x"] = next_x_vals;
-						msgJson["next_y"] = next_y_vals;
+			//Creating a spline
+			tk::spline s;
 
-						auto msg = "42[\"control\","+ msgJson.dump()+"]";
+			//Setting ptsx and ptsy to the spline
+			s.set_points(ptsx,ptsy);
 
-						//this_thread::sleep_for(chrono::milliseconds(1000));
-						ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+			//Adding previously leftover points, to ensure smooth transitions
+			for(int i=0;i<prev_size;i++) {
+				next_x_vals.push_back(previous_path_x[i]);
+				next_y_vals.push_back(previous_path_y[i]);
+			}
+
+			//Selecting a target x,y point in the spline to divide it into N pieces to achieve the target velocity
+			double target_x = 30;   //Target horizon x-value
+			double target_y = s(target_x);   //Target y-value corresponding to the one in the spline for the x-value  
+			double target_dist = sqrt((target_x*target_x) + (target_y*target_y));   //Distance to the target horizon point
+
+			double x_add_on = 0;
+
+			//Number of equally distant points in the spline to be taken to obtain the reference velocity
+			double N = target_dist/(0.02 * ref_vel/2.24);   // As (N*0.02) * ref_vel = distance   //2.24 to convert to m/s
+
+			//Filling up the remaining points for the path planner apart from the left over points. 
+			//Total number of points passed is 50
+			for(int i=1; i<=50-prev_size; i++) {
+				double x_point = x_add_on + target_x/N;  
+				double y_point = s(x_point);
+
+				x_add_on = x_point;
+				double x_ref = x_point;
+				double y_ref = y_point;
+
+				//Converting back to the global coordinate system
+				x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
+				y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
+				x_point += ref_x;
+				y_point += ref_y;
+
+				next_x_vals.push_back(x_point);
+				next_y_vals.push_back(y_point);
+
+				// if(ref_vel<49.5) {
+				// ref_vel += 0.224;
+				//}
+			}
+
+			msgJson["next_x"] = next_x_vals;
+			msgJson["next_y"] = next_y_vals;
+
+			auto msg = "42[\"control\","+ msgJson.dump()+"]";
+
+			//this_thread::sleep_for(chrono::milliseconds(1000));
+			ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
           
         }
       } else {
