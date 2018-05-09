@@ -297,6 +297,7 @@ int main() {
 				bool good_right_lane_change = true;
 				int cost_left = 0;
 				int cost_right = 0;
+				bool car_found = false;
 
 				//If leftmost lane, no left change possible
           		if(new_lane<0) {
@@ -310,6 +311,7 @@ int main() {
 
 						//If car is present in the left lane
           				if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
+							car_found = true;
 		      				double vx = sensor_fusion[i][3];
 			      			double vy = sensor_fusion[i][4];
 			      			double check_speed = sqrt(vx*vx+vy*vy);
@@ -318,8 +320,14 @@ int main() {
 			      			//Predicting where the car will be in the future
 			      			check_car_s += (double)prev_size*0.02*check_speed;
 
+							//Cost for vehicle in the left lane
 							if(check_car_s>(car_s+25) && (check_speed>front_car_v)) {
 								cost_left += 1/(front_car_v-check_speed);
+							}
+
+							//Cost for vehicle in the left lane moving slower than the car in front
+							if(check_car_s>(car_s+25) && (check_speed<front_car_v)) {
+								cost_left += (check_speed-front_car_v);
 							}
 
 							//If new car is within a buffer of 25 in the future, dont change lane
@@ -329,10 +337,15 @@ int main() {
 			      			}
 			      		}
           			}
+					//If no car in the left lane, then reduce the cost
+					if(!car_found) {
+						cost_left -= 100;
+					}
           		}
 				
 				//Check whether changing lane to the right is safe or not
 				new_lane = lane + 1;
+				car_found = false;
 
 				//If no lane on the right
 				if(new_lane>2) {
@@ -344,6 +357,7 @@ int main() {
 
 						//If car is present in the right lane          				
 						if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
+							car_found = true;
 							double vx = sensor_fusion[i][3];
 							double vy = sensor_fusion[i][4];
 							double check_speed = sqrt(vx*vx+vy*vy);
@@ -352,16 +366,26 @@ int main() {
 							//Predicting where the car will be in the future
 							check_car_s += (double)prev_size*0.02*check_speed;
 
-							//If new car is within a buffer of 25 in the future, dont change lane
-							if(check_car_s>(car_s+25) && (check_speed>front_car_v+5)) {
+							//Cost for vehicle in the right lane
+							if(check_car_s>(car_s+25) && (check_speed>front_car_v)) {
 								cost_right += 1/(front_car_v-check_speed);
 							}
 
+							//Cost for vehicle in the right lane moving slower than the car in front
+							if(check_car_s>(car_s+25) && (check_speed<front_car_v)) {
+								cost_right += (check_speed-front_car_v);
+							}
+
+							//If new car is within a buffer of 25 in the future, dont change lane
 							if(fabs(check_car_s-car_s)<25) {
 								good_right_lane_change = false;
 								break;
 							}
 						}
+					}
+					//If no car in the right lane, then reduce the cost
+					if(!car_found) {
+						cost_left -= 100;
 					}
           		}
 
