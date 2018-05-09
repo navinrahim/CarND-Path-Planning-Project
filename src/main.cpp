@@ -168,7 +168,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 int lane = 1;
 
 //Reference velocity to be achieved. Speed limit is 50, so used 49.5
-double ref_vel = 0; //mph
+double ref_vel = 0.224; //mph  //for a=5, v=5*0.02=0.1m/s=0.224mph
 
 int main() {
   uWS::Hub h;
@@ -256,13 +256,14 @@ int main() {
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 
-          	//If points leftover, then set car s to previous point's last s value
+          	//If points leftover, then set car s to previous points last s value
           	if(prev_size > 0) {
           		car_s = end_path_s;
           	}
 
           	bool too_close = false;
 			bool lane_change = false;
+			double front_car_v = ref_vel;
 
           	//sensor_fusion[i] contains [id, x, y, vx, vy, s, d]
           	for(int i=0; i<sensor_fusion.size(); i++) {
@@ -282,9 +283,8 @@ int main() {
           			if((check_car_s>car_s) && ((check_car_s-car_s)<30)) {
 						//Flag for lane change
 						lane_change = true;
-						//Set reference velocity to the other car's velocity
-          				//ref_vel = check_speed;
 						too_close = true;
+						front_car_v = check_speed;
           			}
           		}
           	}
@@ -354,10 +354,13 @@ int main() {
           		
           	}
 
-			if(too_close) {
+			if(too_close && ref_vel>front_car_v) {
 				ref_vel -= 0.224; //for a=5, v=5*0.02=0.1m/s=0.224mph
 			}
-			else if(ref_vel<49.5) {
+			else if(too_close && ref_vel<(front_car_v-1)) {
+				ref_vel += 0;
+			}
+			else if((ref_vel<49.5)) {
 				ref_vel += 0.224;
 			}
 
