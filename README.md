@@ -12,6 +12,9 @@ Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoi
 
 The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
 
+### Reflection
+The model description is present [here](Model Documentation.md)
+
 ## Basic Build Instructions
 
 1. Clone this repo.
