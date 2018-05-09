@@ -264,6 +264,7 @@ int main() {
           	bool too_close = false;
 			bool lane_change = false;
 			double front_car_v = ref_vel;
+			double max_speed = 49.5;
 
           	//sensor_fusion[i] contains [id, x, y, vx, vy, s, d]
           	for(int i=0; i<sensor_fusion.size(); i++) {
@@ -281,7 +282,7 @@ int main() {
 
 					//If the other car is in front of our car and the gap between them is less than 30m
           			if((check_car_s>car_s) && ((check_car_s-car_s)<30)) {
-						//Flag for lane change
+						//Flag for lane change, speed decrease
 						lane_change = true;
 						too_close = true;
 						front_car_v = check_speed;
@@ -293,15 +294,20 @@ int main() {
           		//Check whether changing lane to the left is safe or not
           		int new_lane = lane - 1;
           		bool good_lane_change = true;
+				int cost_left = 0;
+				int cost_right = 0;
 
+				//If leftmost lane, no left change possible
           		if(new_lane<0) {
           			good_lane_change = false;
           		}
 
+				//If in middle or right lane
           		else {
           			for(int i=0; i<sensor_fusion.size(); i++) {
           				float d = sensor_fusion[i][6];
 
+						//If car is present in the left lane
           				if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
 		      				double vx = sensor_fusion[i][3];
 			      			double vy = sensor_fusion[i][4];
@@ -311,6 +317,15 @@ int main() {
 			      			//Predicting where the car will be in the future
 			      			check_car_s += (double)prev_size*0.02*check_speed;
 
+							if(check_car_s>(car_s+25) && (check_speed>front_car_v+5)) {
+								cost_left += 10;
+							}
+
+							if(check_car_s<car_s) {
+								cost_left -= 1000;
+							}
+
+							//If new car is within a buffer of 25 in the future, dont change lane
 			      			if(fabs(check_car_s-car_s)<25) {
 			      				good_lane_change = false;
 			      				break;
@@ -318,49 +333,67 @@ int main() {
 			      		}
           			}
           		}
+				
+				//Check whether changing lane to the right is safe or not
+				new_lane = lane + 1;
 
-          		if(!good_lane_change) {
-          			good_lane_change = true;
-          			new_lane = lane + 1;
+				//If no lane on the right
+				if(new_lane>2) {
+					good_lane_change = false;
+				}
+				else {
+					for(int i=0; i<sensor_fusion.size(); i++) {
+						float d = sensor_fusion[i][6];
 
-          			if(new_lane>2) {
-          				good_lane_change = false;
-          			}
-          			else {
-          				for(int i=0; i<sensor_fusion.size(); i++) {
-          					float d = sensor_fusion[i][6];
-          				
-      						if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
-			      				double vx = sensor_fusion[i][3];
-				      			double vy = sensor_fusion[i][4];
-				      			double check_speed = sqrt(vx*vx+vy*vy);
-				      			double check_car_s = sensor_fusion[i][5];
+						//If car is present in the right lane          				
+						if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
+							double vx = sensor_fusion[i][3];
+							double vy = sensor_fusion[i][4];
+							double check_speed = sqrt(vx*vx+vy*vy);
+							double check_car_s = sensor_fusion[i][5];
 
-				      			//Predicting where the car will be in the future
-				      			check_car_s += (double)prev_size*0.02*check_speed;
+							//Predicting where the car will be in the future
+							check_car_s += (double)prev_size*0.02*check_speed;
 
-				      			if(fabs(check_car_s-car_s)<25) {
-				      				good_lane_change = false;
-				      				break;
-				      			}
-				      		}
-          				}
-          			}
+							//If new car is within a buffer of 25 in the future, dont change lane
+							if(check_car_s>(car_s+25) && (check_speed>front_car_v+5)) {
+							cost_left += 10;
+							}
+
+							if(check_car_s<car_s) {
+								cost_left -= 1000;
+							}
+
+							if(fabs(check_car_s-car_s)<25) {
+								good_lane_change = false;
+								break;
+							}
+						}
+					}
           		}
 
+				//If lane change possible, change lane
           		if(good_lane_change) {
-          			lane = new_lane;
+					if(cost_left>=cost_right) {
+						lane -= 1;
+					}
+					else{
+						lane += 1;
+					}
           		}
           		
           	}
 
+			//If car is in front and our velocity is greater than its velocity, slow down
 			if(too_close && ref_vel>front_car_v) {
 				ref_vel -= 0.224; //for a=5, v=5*0.02=0.1m/s=0.224mph
 			}
-			else if(too_close && ref_vel<(front_car_v-1)) {
+			//If car is in front and our velocity is close to the other vehicle, maintain the speed
+			else if(too_close && ref_vel<(front_car_v-2)) {
 				ref_vel += 0;
 			}
-			else if((ref_vel<49.5)) {
+			//Accelerate if velocity less than the reference velocity
+			else if((ref_vel<max_speed)) {
 				ref_vel += 0.224;
 			}
 
@@ -468,10 +501,6 @@ int main() {
 
 				next_x_vals.push_back(x_point);
 				next_y_vals.push_back(y_point);
-
-				// if(ref_vel<49.5) {
-				// ref_vel += 0.224;
-				//}
 			}
 
 			msgJson["next_x"] = next_x_vals;
