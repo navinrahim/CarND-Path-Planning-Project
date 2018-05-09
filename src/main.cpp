@@ -297,7 +297,6 @@ int main() {
 				bool good_right_lane_change = true;
 				int cost_left = 0;
 				int cost_right = 0;
-				bool car_found = false;
 
 				//If leftmost lane, no left change possible
           		if(new_lane<0) {
@@ -311,7 +310,6 @@ int main() {
 
 						//If car is present in the left lane
           				if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
-							car_found = true;
 		      				double vx = sensor_fusion[i][3];
 			      			double vy = sensor_fusion[i][4];
 			      			double check_speed = sqrt(vx*vx+vy*vy);
@@ -337,15 +335,10 @@ int main() {
 			      			}
 			      		}
           			}
-					//If no car in the left lane, then reduce the cost
-					if(!car_found) {
-						cost_left -= 100;
-					}
           		}
 				
 				//Check whether changing lane to the right is safe or not
 				new_lane = lane + 1;
-				car_found = false;
 
 				//If no lane on the right
 				if(new_lane>2) {
@@ -357,7 +350,6 @@ int main() {
 
 						//If car is present in the right lane          				
 						if((d<(2+4*new_lane+2)) && (d>(2+4*new_lane-2))) {
-							car_found = true;
 							double vx = sensor_fusion[i][3];
 							double vy = sensor_fusion[i][4];
 							double check_speed = sqrt(vx*vx+vy*vy);
@@ -383,15 +375,11 @@ int main() {
 							}
 						}
 					}
-					//If no car in the right lane, then reduce the cost
-					if(!car_found) {
-						cost_left -= 100;
-					}
           		}
 
 				//If lane change possible, change lane
           		if(good_left_lane_change && good_right_lane_change) {
-					if(cost_left>=cost_right) {
+					if(cost_left<=cost_right) {
 						lane -= 1;
 					}
 					else{
