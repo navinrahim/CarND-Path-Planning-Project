@@ -293,13 +293,14 @@ int main() {
           	if(lane_change) {
           		//Check whether changing lane to the left is safe or not
           		int new_lane = lane - 1;
-          		bool good_lane_change = true;
+          		bool good_left_lane_change = true;
+				bool good_right_lane_change = true;
 				int cost_left = 0;
 				int cost_right = 0;
 
 				//If leftmost lane, no left change possible
           		if(new_lane<0) {
-          			good_lane_change = false;
+          			good_left_lane_change = false;
           		}
 
 				//If in middle or right lane
@@ -317,17 +318,13 @@ int main() {
 			      			//Predicting where the car will be in the future
 			      			check_car_s += (double)prev_size*0.02*check_speed;
 
-							if(check_car_s>(car_s+25) && (check_speed>front_car_v+5)) {
-								cost_left += 10;
-							}
-
-							if(check_car_s<car_s) {
-								cost_left -= 1000;
+							if(check_car_s>(car_s+25) && (check_speed>front_car_v)) {
+								cost_left += 1/(front_car_v-check_speed);
 							}
 
 							//If new car is within a buffer of 25 in the future, dont change lane
 			      			if(fabs(check_car_s-car_s)<25) {
-			      				good_lane_change = false;
+			      				good_left_lane_change = false;
 			      				break;
 			      			}
 			      		}
@@ -339,7 +336,7 @@ int main() {
 
 				//If no lane on the right
 				if(new_lane>2) {
-					good_lane_change = false;
+					good_right_lane_change = false;
 				}
 				else {
 					for(int i=0; i<sensor_fusion.size(); i++) {
@@ -357,15 +354,11 @@ int main() {
 
 							//If new car is within a buffer of 25 in the future, dont change lane
 							if(check_car_s>(car_s+25) && (check_speed>front_car_v+5)) {
-							cost_left += 10;
-							}
-
-							if(check_car_s<car_s) {
-								cost_left -= 1000;
+								cost_right += 1/(front_car_v-check_speed);
 							}
 
 							if(fabs(check_car_s-car_s)<25) {
-								good_lane_change = false;
+								good_right_lane_change = false;
 								break;
 							}
 						}
@@ -373,7 +366,7 @@ int main() {
           		}
 
 				//If lane change possible, change lane
-          		if(good_lane_change) {
+          		if(good_left_lane_change && good_right_lane_change) {
 					if(cost_left>=cost_right) {
 						lane -= 1;
 					}
@@ -381,7 +374,12 @@ int main() {
 						lane += 1;
 					}
           		}
-          		
+          		else if(good_left_lane_change) {
+					  lane -= 1;
+				}
+				else if(good_right_lane_change) {
+					  lane += 1;
+				}
           	}
 
 			//If car is in front and our velocity is greater than its velocity, slow down
@@ -389,7 +387,7 @@ int main() {
 				ref_vel -= 0.224; //for a=5, v=5*0.02=0.1m/s=0.224mph
 			}
 			//If car is in front and our velocity is close to the other vehicle, maintain the speed
-			else if(too_close && ref_vel<(front_car_v-2)) {
+			else if(too_close && ref_vel<(front_car_v-1)) {
 				ref_vel += 0;
 			}
 			//Accelerate if velocity less than the reference velocity
@@ -481,7 +479,7 @@ int main() {
 			double x_add_on = 0;
 
 			//Number of equally distant points in the spline to be taken to obtain the reference velocity
-			double N = target_dist/(0.02 * ref_vel/2.24);   // As (N*0.02) * ref_vel = distance   //2.24 to convert to m/s
+			double N = target_dist/(0.02 * ref_vel / 2.24);   // As (N*0.02) * ref_vel = distance   //2.24 to convert to m/s
 
 			//Filling up the remaining points for the path planner apart from the left over points. 
 			//Total number of points passed is 50
