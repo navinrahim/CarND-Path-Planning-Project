@@ -164,6 +164,26 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+// Add up to the cost for lane transition based on vehicles in the next lane
+double getVelocityCost(double cost, double car_s, double check_car_s, double front_car_v, double check_speed) {
+	//Cost for vehicle in the next lane
+	if(check_car_s>(car_s+25) && (check_speed>front_car_v)) {
+		cost += 1/(check_speed-front_car_v);
+	}
+
+	//Cost for vehicle in the next lane moving slower than the car in front
+	if(check_car_s>(car_s+25) && (check_speed<front_car_v)) {
+		cost += (front_car_v-check_speed);
+	}
+
+	//Cost for vehicle in the next lane moving in the same speed as car in front
+	if(check_car_s>(car_s+25) && (check_speed==front_car_v)) {
+		cost += 10;
+	}
+
+	return cost;
+}
+
 //Current lane
 int lane = 1;
 
@@ -295,8 +315,8 @@ int main() {
           		int new_lane = lane - 1;
           		bool good_left_lane_change = true;
 				bool good_right_lane_change = true;
-				int cost_left = 0;
-				int cost_right = 0;
+				double cost_left = 0;
+				double cost_right = 0;
 
 				//If leftmost lane, no left change possible
           		if(new_lane<0) {
@@ -318,15 +338,8 @@ int main() {
 			      			//Predicting where the car will be in the future
 			      			check_car_s += (double)prev_size*0.02*check_speed;
 
-							//Cost for vehicle in the left lane
-							if(check_car_s>(car_s+25) && (check_speed>front_car_v)) {
-								cost_left += 1/(front_car_v-check_speed);
-							}
-
-							//Cost for vehicle in the left lane moving slower than the car in front
-							if(check_car_s>(car_s+25) && (check_speed<front_car_v)) {
-								cost_left += (check_speed-front_car_v);
-							}
+			      			//Calculate cost
+							cost_left = getVelocityCost(cost_left, car_s, check_car_s, front_car_v, check_speed);
 
 							//If new car is within a buffer of 25 in the future, dont change lane
 			      			if(fabs(check_car_s-car_s)<25) {
@@ -358,15 +371,8 @@ int main() {
 							//Predicting where the car will be in the future
 							check_car_s += (double)prev_size*0.02*check_speed;
 
-							//Cost for vehicle in the right lane
-							if(check_car_s>(car_s+25) && (check_speed>front_car_v)) {
-								cost_right += 1/(front_car_v-check_speed);
-							}
-
-							//Cost for vehicle in the right lane moving slower than the car in front
-							if(check_car_s>(car_s+25) && (check_speed<front_car_v)) {
-								cost_right += (check_speed-front_car_v);
-							}
+							//Calculate cost
+							cost_right = getVelocityCost(cost_right, car_s, check_car_s, front_car_v, check_speed);
 
 							//If new car is within a buffer of 25 in the future, dont change lane
 							if(fabs(check_car_s-car_s)<25) {
