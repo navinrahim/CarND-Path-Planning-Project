@@ -15,6 +15,9 @@ The highway's waypoints loop around so the frenet s value, distance along the ro
 ### Reflection
 The model description is present [here](Model%20Documentation.md)
 
+### Output Video
+The recorded output can be found [here](https://www.youtube.com/watch?v=KvxEKX68PS0)
+
 ## Basic Build Instructions
 
 1. Clone this repo.
